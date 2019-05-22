@@ -11,7 +11,8 @@
 
 namespace CakeDC\Users\Test\TestCase\Controller\Traits;
 
-use CakeDC\Users\Auth\DefaultU2fAuthenticationChecker;
+use CakeDC\Auth\Authentication\DefaultU2fAuthenticationChecker;
+use CakeDC\Users\Model\Entity\User;
 use Cake\Core\Configure;
 use Cake\Http\Response;
 use Cake\Http\ServerRequest;
@@ -47,10 +48,6 @@ class U2fTraitTest extends BaseTraitTest
 
         parent::setUp();
 
-        $this->Trait->Auth = $this->getMockBuilder('Cake\Controller\Component\AuthComponent')
-            ->setMethods(['setConfig', 'redirectUrl', 'setUser'])
-            ->disableOriginalConstructor()
-            ->getMock();
         $this->Trait->expects($this->any())
             ->method('getU2fAuthenticationChecker')
             ->willReturn(new DefaultU2fAuthenticationChecker());
@@ -89,14 +86,14 @@ class U2fTraitTest extends BaseTraitTest
     public function dataProviderU2User()
     {
         $empty = [];
-        $withRegistration = [
+        $withRegistration = new User([
             'id' => '00000000-0000-0000-0000-000000000001',
             'username' => 'user-1',
-        ];
-        $withWhoutRegistration = [
+        ]);
+        $withWhoutRegistration = new User([
             'id' => '00000000-0000-0000-0000-000000000002',
             'username' => 'user-2',
-        ];
+        ]);
 
         return [
             [$empty, ['action' => 'login']],
@@ -116,8 +113,13 @@ class U2fTraitTest extends BaseTraitTest
     public function testU2fCustomUser($userData, $redirect)
     {
         $this->Trait->request = $this->getMockBuilder('Cake\Http\ServerRequest')
-            ->setMethods(['getSession'])
+            ->setMethods(['getSession', 'is'])
             ->getMock();
+        $this->Trait->request->expects($this->any())
+            ->method('is')
+            ->with(
+                $this->equalTo('ssl')
+            )->will($this->returnValue(true));
         $response = new Response([
             'body' => time()
         ]);
@@ -141,8 +143,13 @@ class U2fTraitTest extends BaseTraitTest
     public function testU2fRegisterOkay()
     {
         $this->Trait->request = $this->getMockBuilder('Cake\Http\ServerRequest')
-            ->setMethods(['getSession'])
+            ->setMethods(['getSession', 'is'])
             ->getMock();
+        $this->Trait->request->expects($this->once())
+            ->method('is')
+            ->with(
+                $this->equalTo('ssl')
+            )->will($this->returnValue(true));
 
         $u2fLib = $this->getMockBuilder(U2F::class)
             ->setConstructorArgs(['https://localhost'])
@@ -173,10 +180,10 @@ class U2fTraitTest extends BaseTraitTest
             ->method('redirect');
 
         $this->_mockSession([
-            'U2f.User' => [
+            'U2f.User' => new User([
                 'id' => '00000000-0000-0000-0000-000000000002',
                 'username' => 'user-2',
-            ],
+            ]),
         ]);
         $actual = $this->Trait->u2fRegister();
         $this->assertNull($actual);
@@ -193,10 +200,10 @@ class U2fTraitTest extends BaseTraitTest
     public function dataProviderU2fRegisterRedirect()
     {
         $empty = [];
-        $withRegistration = [
+        $withRegistration = new User([
             'id' => '00000000-0000-0000-0000-000000000001',
             'username' => 'user-1',
-        ];
+        ]);
 
         return [
             [$empty, ['action' => 'login']],
@@ -216,9 +223,13 @@ class U2fTraitTest extends BaseTraitTest
     public function testU2fRegisterRedirect($userData, $redirect)
     {
         $this->Trait->request = $this->getMockBuilder('Cake\Http\ServerRequest')
-            ->setMethods(['getSession'])
+            ->setMethods(['getSession', 'is'])
             ->getMock();
-
+        $this->Trait->request->expects($this->any())
+            ->method('is')
+            ->with(
+                $this->equalTo('ssl')
+            )->will($this->returnValue(true));
         $this->Trait->expects($this->never())
             ->method('createU2fLib');
 
@@ -252,8 +263,13 @@ class U2fTraitTest extends BaseTraitTest
     public function testU2fRegisterFinishOkay()
     {
         $this->Trait->request = $this->getMockBuilder('Cake\Http\ServerRequest')
-            ->setMethods(['getSession', 'getData'])
+            ->setMethods(['getSession', 'is', 'getData'])
             ->getMock();
+        $this->Trait->request->expects($this->once())
+            ->method('is')
+            ->with(
+                $this->equalTo('ssl')
+            )->will($this->returnValue(true));
 
         $u2fLib = $this->getMockBuilder(U2F::class)
             ->setConstructorArgs(['https://localhost'])
@@ -282,10 +298,10 @@ class U2fTraitTest extends BaseTraitTest
             ->will($this->returnValue(json_encode($registerResponse)));
         $this->_mockSession([
             'U2f' => [
-                'User' => [
+                'User' => new User([
                     'id' => '00000000-0000-0000-0000-000000000002',
                     'username' => 'user-2',
-                ],
+                ]),
                 'registerRequest' => json_encode($registerRequest)
             ],
         ]);
@@ -316,15 +332,10 @@ class U2fTraitTest extends BaseTraitTest
         $actual = $this->Trait->u2fRegisterFinish();
         $this->assertSame($response, $actual);
         $actual = $this->Trait->request->getSession()->read('U2f');
-        $this->assertEquals(
-            [
-                'User' => [
-                    'id' => '00000000-0000-0000-0000-000000000002',
-                    'username' => 'user-2',
-                ],
-            ],
-            $actual
-        );
+        $this->assertEquals('00000000-0000-0000-0000-000000000002', $actual['User']['id']);
+        $this->assertEquals('user-2', $actual['User']['username']);
+        $this->assertNotEmpty($actual['User']['additional_data']);
+        $this->assertNotEmpty($actual['User']['additional_data']['u2f_registration']);
 
         $saveUser = TableRegistry::getTableLocator()
             ->get('CakeDC/Users.Users')
@@ -349,8 +360,13 @@ class U2fTraitTest extends BaseTraitTest
     public function testU2fRegisterFinishException()
     {
         $this->Trait->request = $this->getMockBuilder('Cake\Http\ServerRequest')
-            ->setMethods(['getSession', 'getData'])
+            ->setMethods(['getSession', 'is', 'getData'])
             ->getMock();
+        $this->Trait->request->expects($this->once())
+            ->method('is')
+            ->with(
+                $this->equalTo('ssl')
+            )->will($this->returnValue(true));
 
         $u2fLib = $this->getMockBuilder(U2F::class)
             ->setConstructorArgs(['https://localhost'])
@@ -375,10 +391,10 @@ class U2fTraitTest extends BaseTraitTest
             ->will($this->returnValue(json_encode($registerResponse)));
         $this->_mockSession([
             'U2f' => [
-                'User' => [
+                'User' => new User([
                     'id' => '00000000-0000-0000-0000-000000000002',
                     'username' => 'user-2',
-                ],
+                ]),
                 'registerRequest' => json_encode($registerRequest)
             ],
         ]);
@@ -411,10 +427,10 @@ class U2fTraitTest extends BaseTraitTest
         $actual = $this->Trait->request->getSession()->read('U2f');
         $this->assertEquals(
             [
-                'User' => [
+                'User' => new User([
                     'id' => '00000000-0000-0000-0000-000000000002',
                     'username' => 'user-2',
-                ],
+                ]),
             ],
             $actual
         );
@@ -441,10 +457,10 @@ class U2fTraitTest extends BaseTraitTest
     public function dataProviderU2fAuthenticateRedirectCustomUser()
     {
         $empty = [];
-        $withWhoutRegistration = [
+        $withWhoutRegistration = new User([
             'id' => '00000000-0000-0000-0000-000000000002',
             'username' => 'user-2',
-        ];
+        ]);
 
         return [
             [$empty, ['action' => 'login']],
@@ -463,8 +479,13 @@ class U2fTraitTest extends BaseTraitTest
     public function testU2fAuthenticateRedirectCustomUser($userData, $redirect)
     {
         $this->Trait->request = $this->getMockBuilder('Cake\Http\ServerRequest')
-            ->setMethods(['getSession'])
+            ->setMethods(['getSession', 'is'])
             ->getMock();
+        $this->Trait->request->expects($this->any())
+            ->method('is')
+            ->with(
+                $this->equalTo('ssl')
+            )->will($this->returnValue(true));
         $response = new Response([
             'body' => time()
         ]);
@@ -488,8 +509,13 @@ class U2fTraitTest extends BaseTraitTest
     public function testU2fAuthenticate()
     {
         $this->Trait->request = $this->getMockBuilder('Cake\Http\ServerRequest')
-            ->setMethods(['getSession'])
+            ->setMethods(['getSession', 'is'])
             ->getMock();
+        $this->Trait->request->expects($this->once())
+            ->method('is')
+            ->with(
+                $this->equalTo('ssl')
+            )->will($this->returnValue(true));
 
         $u2fLib = $this->getMockBuilder(U2F::class)
             ->setConstructorArgs(['https://localhost'])
@@ -530,10 +556,10 @@ class U2fTraitTest extends BaseTraitTest
             ->method('redirect');
 
         $this->_mockSession([
-            'U2f.User' => [
+            'U2f.User' => new User([
                 'id' => '00000000-0000-0000-0000-000000000001',
                 'username' => 'user-1',
-            ],
+            ]),
         ]);
         $actual = $this->Trait->u2fAuthenticate();
         $this->assertNull($actual);
@@ -547,7 +573,7 @@ class U2fTraitTest extends BaseTraitTest
      *
      * @return void
      */
-    public function testU2fAutheticateFinish()
+    public function testU2fAutheticateFinishOkay()
     {
         $user = TableRegistry::getTableLocator()
             ->get('CakeDC/Users.Users')
@@ -561,17 +587,14 @@ class U2fTraitTest extends BaseTraitTest
         $registrationEntityResult->counter = $registration->counter + 1;
         $registrationEntityResult->certificate = $registration->certificate;
 
-        $this->Trait->Auth->expects($this->once())
-            ->method('redirectUrl')
-            ->will($this->returnValue('/my-home-page'));
-
-        $this->Trait->Auth->expects($this->once())
-            ->method('setUser');
-
         $this->Trait->request = $this->getMockBuilder('Cake\Http\ServerRequest')
-            ->setMethods(['getSession', 'getData'])
+            ->setMethods(['getSession', 'is', 'getData'])
             ->getMock();
-
+        $this->Trait->request->expects($this->once())
+            ->method('is')
+            ->with(
+                $this->equalTo('ssl')
+            )->will($this->returnValue(true));
         $u2fLib = $this->getMockBuilder(U2F::class)
             ->setConstructorArgs(['https://localhost'])
             ->setMethods(['doAuthenticate'])
@@ -592,10 +615,10 @@ class U2fTraitTest extends BaseTraitTest
             ->will($this->returnValue(json_encode($authenticateResponse)));
         $this->_mockSession([
             'U2f' => [
-                'User' => [
+                'User' => new User([
                     'id' => '00000000-0000-0000-0000-000000000001',
                     'username' => 'user-1',
-                ],
+                ]),
                 'authenticateRequest' => json_encode($signs)
             ],
         ]);
@@ -619,7 +642,12 @@ class U2fTraitTest extends BaseTraitTest
         $response = new Response();
         $this->Trait->expects($this->once())
             ->method('redirect')
-            ->with('/my-home-page')->will($this->returnValue($response));
+            ->with([
+                'plugin' => 'CakeDC/Users',
+                'controller' => 'Users',
+                'action' => 'login',
+                'prefix' => false
+            ])->will($this->returnValue($response));
 
         $actual = $this->Trait->u2fAuthenticateFinish();
         $this->assertSame($response, $actual);
@@ -651,15 +679,14 @@ class U2fTraitTest extends BaseTraitTest
         $counter = $registration->counter;
         $this->assertNotNull($registration);
 
-        $this->Trait->Auth->expects($this->never())
-            ->method('redirectUrl');
-
-        $this->Trait->Auth->expects($this->never())
-            ->method('setUser');
-
         $this->Trait->request = $this->getMockBuilder('Cake\Http\ServerRequest')
-            ->setMethods(['getSession', 'getData'])
+            ->setMethods(['getSession', 'is', 'getData'])
             ->getMock();
+        $this->Trait->request->expects($this->once())
+            ->method('is')
+            ->with(
+                $this->equalTo('ssl')
+            )->will($this->returnValue(true));
 
         $u2fLib = $this->getMockBuilder(U2F::class)
             ->setConstructorArgs(['https://localhost'])
@@ -682,10 +709,10 @@ class U2fTraitTest extends BaseTraitTest
 
         $this->_mockSession([
             'U2f' => [
-                'User' => [
+                'User' => new User([
                     'id' => '00000000-0000-0000-0000-000000000001',
                     'username' => 'user-1',
-                ],
+                ]),
                 'authenticateRequest' => json_encode($signs)
             ],
         ]);
@@ -714,10 +741,10 @@ class U2fTraitTest extends BaseTraitTest
         $actual = $this->Trait->request->getSession()->read('U2f');
         $this->assertEquals(
             [
-                'User' => [
+                'User' => new User([
                     'id' => '00000000-0000-0000-0000-000000000001',
                     'username' => 'user-1',
-                ],
+                ]),
             ],
             $actual
         );

@@ -1,21 +1,19 @@
 <?php
 /**
- * Copyright 2010 - 2017, Cake Development Corporation (https://www.cakedc.com)
+ * Copyright 2010 - 2019, Cake Development Corporation (https://www.cakedc.com)
  *
  * Licensed under The MIT License
  * Redistributions of files must retain the above copyright notice.
  *
- * @copyright Copyright 2010 - 2017, Cake Development Corporation (https://www.cakedc.com)
+ * @copyright Copyright 2010 - 2018, Cake Development Corporation (https://www.cakedc.com)
  * @license MIT License (http://www.opensource.org/licenses/mit-license.php)
  */
 
 namespace CakeDC\Users\Model\Table;
 
 use Cake\Database\Schema\TableSchema;
-use Cake\ORM\Query;
 use Cake\ORM\RulesChecker;
 use Cake\ORM\Table;
-use Cake\Utility\Hash;
 use Cake\Validation\Validator;
 
 /**
@@ -84,15 +82,15 @@ class UsersTable extends Table
     {
         $validator
             ->requirePresence('password_confirm', 'create')
-            ->notEmpty('password_confirm');
+            ->notBlank('password_confirm');
 
         $validator
             ->requirePresence('password', 'create')
-            ->notEmpty('password')
+            ->notBlank('password')
             ->add('password', [
                 'password_confirm_check' => [
                     'rule' => ['compareWith', 'password_confirm'],
-                    'message' => __d('CakeDC/Users', 'Your password does not match your confirm password. Please try again'),
+                    'message' => __d('cake_d_c/users', 'Your password does not match your confirm password. Please try again'),
                     'allowEmpty' => false
                 ]]);
 
@@ -108,7 +106,7 @@ class UsersTable extends Table
     public function validationCurrentPassword(Validator $validator)
     {
         $validator
-            ->notEmpty('current_password');
+            ->notBlank('current_password');
 
         return $validator;
     }
@@ -122,39 +120,39 @@ class UsersTable extends Table
     public function validationDefault(Validator $validator)
     {
         $validator
-            ->allowEmpty('id', 'create');
+            ->allowEmptyString('id', 'create');
 
         $validator
             ->requirePresence('username', 'create')
-            ->notEmpty('username');
+            ->notBlank('username');
 
         $validator
             ->requirePresence('password', 'create')
-            ->notEmpty('password');
+            ->notBlank('password');
 
         $validator
-            ->allowEmpty('first_name');
+            ->allowEmptyString('first_name');
 
         $validator
-            ->allowEmpty('last_name');
+            ->allowEmptyString('last_name');
 
         $validator
-            ->allowEmpty('token');
+            ->allowEmptyString('token');
 
         $validator
             ->add('token_expires', 'valid', ['rule' => 'datetime'])
-            ->allowEmpty('token_expires');
+            ->allowEmptyDateTime('token_expires');
 
         $validator
-            ->allowEmpty('api_token');
+            ->allowEmptyString('api_token');
 
         $validator
             ->add('activation_date', 'valid', ['rule' => 'datetime'])
-            ->allowEmpty('activation_date');
+            ->allowEmptyDateTime('activation_date');
 
         $validator
             ->add('tos_date', 'valid', ['rule' => 'datetime'])
-            ->allowEmpty('tos_date');
+            ->allowEmptyDateTime('tos_date');
 
         return $validator;
     }
@@ -184,13 +182,13 @@ class UsersTable extends Table
     {
         $rules->add($rules->isUnique(['username']), '_isUnique', [
             'errorField' => 'username',
-            'message' => __d('CakeDC/Users', 'Username already exists')
+            'message' => __d('cake_d_c/users', 'Username already exists')
         ]);
 
         if ($this->isValidateEmail) {
             $rules->add($rules->isUnique(['email']), '_isUnique', [
                 'errorField' => 'email',
-                'message' => __d('CakeDC/Users', 'Email already exists')
+                'message' => __d('cake_d_c/users', 'Email already exists')
             ]);
         }
 

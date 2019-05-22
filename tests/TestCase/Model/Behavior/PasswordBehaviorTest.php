@@ -1,17 +1,18 @@
 <?php
 /**
- * Copyright 2010 - 2017, Cake Development Corporation (https://www.cakedc.com)
+ * Copyright 2010 - 2019, Cake Development Corporation (https://www.cakedc.com)
  *
  * Licensed under The MIT License
  * Redistributions of files must retain the above copyright notice.
  *
- * @copyright Copyright 2010 - 2017, Cake Development Corporation (https://www.cakedc.com)
+ * @copyright Copyright 2010 - 2018, Cake Development Corporation (https://www.cakedc.com)
  * @license MIT License (http://www.opensource.org/licenses/mit-license.php)
  */
 
 namespace CakeDC\Users\Test\TestCase\Model\Behavior;
 
 use CakeDC\Users\Model\Behavior\PasswordBehavior;
+use CakeDC\Users\Model\Entity\User;
 use CakeDC\Users\Test\App\Mailer\OverrideMailer;
 use Cake\Core\Configure;
 use Cake\Mailer\Email;
@@ -173,7 +174,7 @@ class PasswordBehaviorTest extends TestCase
      */
     public function testResetTokenUserNotActive()
     {
-        $user = $this->table->findByUsername('user-1')->first();
+        $this->table->findByUsername('user-1')->firstOrFail();
         $this->Behavior->resetToken('user-1', [
             'ensureActive' => true,
             'expiration' => 3600
@@ -204,6 +205,8 @@ class PasswordBehaviorTest extends TestCase
         $user->password_confirmation = 'new';
 
         $result = $this->Behavior->changePassword($user);
+        $this->assertInstanceOf(User::class, $result);
+        $this->assertEmpty($result->getErrors());
     }
 
     /**
